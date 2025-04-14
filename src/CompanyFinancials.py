@@ -110,41 +110,88 @@ class CompanyFinancials:
     # 4. Operating Income (trailing annual, from Income Statement)
     def get_operating_income_trailing(self):
         try:
-            latest = self.income_statement["annualReports"][0]
-            return float(latest.get("operatingIncome", 0))
+            quarterly_reports = self.income_statement["quarterlyReports"][:4]
+            if len(quarterly_reports) < 4:
+                raise Exception("Not enough quarterly data to compute operating income trailing")
+
+            operating_income = sum(float(q.get("operatingIncome", 0)) for q in quarterly_reports)
+            return operating_income
         except (IndexError, KeyError):
             return None
 
     # 5. Net Income Common (trailing annual, from Income Statement)
     def get_net_income_trailing(self):
         try:
-            latest = self.income_statement["annualReports"][0]
-            return float(latest.get("netIncome", 0))
+            quarterly_reports = self.income_statement["quarterlyReports"][:4]
+            if len(quarterly_reports) < 4:
+                raise Exception("Not enough quarterly data to compute net income trailing")
+
+            net_income = sum(float(q.get("netIncome", 0)) for q in quarterly_reports)
+            return net_income
         except (IndexError, KeyError):
             return None
 
     # 6. ROE (trailing annual, from Overview)
     def get_roe_trailing(self):
-        return float(self.overview.get("ReturnOnEquityTTM", 0))
+        try:
+            # Use the most recent annual shareholder equity as a proxy for average equity.
+            latest_bs = self.balance_sheet["quarterlyReports"]
+            if not latest_bs:
+                raise Exception("No balance sheet data available")
+
+            latest_equity = float(latest_bs[0].get("totalShareholderEquity", 0))
+            if latest_equity == 0:
+                raise Exception("Latest shareholder equity is zero, cannot compute ROE")
+
+            # Compute ROE as the ratio of TTM net income to the shareholder equity
+            ttm_roe = self.get_net_income_trailing() / latest_equity
+            return ttm_roe
+
+        except Exception as e:
+            print(f"Error calculating TTM ROE from quarterly data: {e}")
+            return None
 
     # 7. ROA (trailing annual, from Overview)
     def get_roa_trailing(self):
-        return float(self.overview.get("ReturnOnAssetsTTM", 0))
+        try:
+            # Use the most recent annual shareholder equity as a proxy for average equity.
+            latest_bs = self.balance_sheet["quarterlyReports"]
+            if not latest_bs:
+                raise Exception("No balance sheet data available")
+
+            latest_assets  = float(latest_bs[0].get("totalAssets", 0))
+            if latest_assets  == 0:
+                raise Exception("Latest shareholder equity is zero, cannot compute ROE")
+
+            # Compute ROA as the ratio of TTM net income to total assets
+            ttm_roa = self.get_net_income_trailing() / latest_assets
+            return ttm_roa
+
+        except Exception as e:
+            print(f"Error calculating TTM ROE from quarterly data: {e}")
+            return None
 
     # 8. Revenue (trailing annual, from Income Statement)
     def get_revenue_trailing(self):
         try:
-            latest = self.income_statement["annualReports"][0]
-            return float(latest.get("totalRevenue", 0))
+            quarterly_reports = self.income_statement["quarterlyReports"][:4]
+            if len(quarterly_reports) < 4:
+                raise Exception("Not enough quarterly data to compute revenue trailing")
+
+            revenue = sum(float(q.get("totalRevenue", 0)) for q in quarterly_reports)
+            return revenue
         except (IndexError, KeyError):
             return None
 
     # 9. Gross Margin (trailing annual) = (Gross Profit / Revenue) * 100
     def get_gross_margin_trailing(self):
         try:
-            latest = self.income_statement["annualReports"][0]
-            gross_profit = float(latest.get("grossProfit", 0))
-            revenue = float(latest.get("totalRevenue", 0))
+            quarterly_reports = self.income_statement["quarterlyReports"][:4]
+            if len(quarterly_reports) < 4:
+                raise Exception("Not enough quarterly data to compute gross margin trailing")
+
+            gross_profit = sum(float(q.get("grossProfit", 0)) for q in quarterly_reports)
+            revenue = self.get_revenue_trailing()
             if revenue > 0:
                 return (gross_profit / revenue) * 100
             else:
@@ -155,14 +202,17 @@ class CompanyFinancials:
     # 10. How many years does book value per share grow in last 3 years?
     def get_book_value_growth_years_last_3(self):
         try:
-            annual_bs = self.balance_sheet["annualReports"][:3]  # last 3 years (most recent first)
-            shares_outstanding = float(self.overview.get("SharesOutstanding", 0))
+            quarterly_reports = self.balance_sheet["quarterlyReports"][:16] # last 4 years (most recent first)
+            if len(quarterly_reports) < 16:
+                raise Exception("Not enough quarterly data to compute book value per share for last 3 years")
+
+            annual_bs = [sum(float(quarterly_reports[i * 4 + j].get("totalShareholderEquity", 0)) for j in range(4)) for i in range(4)]
+            shares_outstanding = [float(quarterly_reports[i * 4].get("commonStockSharesOutstanding", 0)) for i in range(4)]
             growth_count = 0
             # Compute book value per share for each year and compare to previous year
             bvps = []
-            for report in annual_bs:
-                total_equity = float(report.get("totalShareholderEquity", 0))
-                bvps.append(total_equity / shares_outstanding if shares_outstanding else 0)
+            for i in range(3):
+                bvps.append(annual_bs[i] / shares_outstanding[i] if shares_outstanding[i] else 0)
             # Compare each consecutive pair (from older to newer)
             for i in range(len(bvps) - 1):
                 # Check if growth from i+1 -> i (since list is most recent first)
@@ -175,9 +225,12 @@ class CompanyFinancials:
     # 11. How many years does revenue grow in last 3 years?
     def get_revenue_growth_years_last_3(self):
         try:
-            annual_is = self.income_statement["annualReports"][:3]
+            quarterly_reports = self.income_statement["quarterlyReports"][:16]  # last 4 years (most recent first)
+            if len(quarterly_reports) < 16:
+                raise Exception("Not enough quarterly data to compute revenue for last 3 years")
+
+            revenues = [sum(float(quarterly_reports[i * 4 + j].get("totalRevenue", 0)) for j in range(4)) for i in range(4)]
             growth_count = 0
-            revenues = [float(report.get("totalRevenue", 0)) for report in annual_is]
             # Compare consecutive annual revenues (list is most recent first)
             for i in range(len(revenues) - 1):
                 if revenues[i] > revenues[i + 1]:
@@ -189,9 +242,12 @@ class CompanyFinancials:
     # 12. How many quarters does revenue grow in last 4 quarters?
     def get_quarters_revenue_growth_last_4(self):
         try:
-            quarterly_is = self.income_statement["quarterlyReports"][:4]
+            quarterly_reports = self.income_statement["quarterlyReports"][:5]
+            if len(quarterly_reports) < 5:
+                raise Exception("Not enough quarterly data to compute revenue for last 4 quarters")
+
             growth_count = 0
-            revenues = [float(report.get("totalRevenue", 0)) for report in quarterly_is]
+            revenues = [float(report.get("totalRevenue", 0)) for report in quarterly_reports]
             for i in range(len(revenues) - 1):
                 if revenues[i] > revenues[i + 1]:
                     growth_count += 1
@@ -199,16 +255,16 @@ class CompanyFinancials:
         except (IndexError, KeyError, ValueError):
             return None
 
-    # 13. Last 3 yrs revenue growth in % = ((latest revenue - revenue 3 years ago) / revenue 3 years ago) * 100
+    # 13. Last 3 yrs revenue growth in %
     def get_revenue_growth_percent_last_3(self):
         try:
-            annual_is = self.income_statement["annualReports"]
-            if len(annual_is) < 3:
-                return None
-            latest_revenue = float(annual_is[0].get("totalRevenue", 0))
-            third_year_revenue = float(annual_is[2].get("totalRevenue", 0))
-            if third_year_revenue:
-                return ((latest_revenue - third_year_revenue) / third_year_revenue) * 100
+            quarterly_reports = self.income_statement["quarterlyReports"]
+            if len(quarterly_reports) < 16:
+                raise Exception("Not enough quarterly data to compute revenue growth for last 3 years")
+            latest_revenue = sum(float(q.get("totalRevenue", 0)) for q in quarterly_reports[:4])
+            forth_year_revenue = sum(float(q.get("totalRevenue", 0)) for q in quarterly_reports[12:16])
+            if forth_year_revenue:
+                return ((latest_revenue - forth_year_revenue) / forth_year_revenue) * 100
             else:
                 return None
         except (IndexError, KeyError, ValueError):
@@ -225,7 +281,7 @@ class CompanyFinancials:
     # 15. Equity multiplier = totalAssets / totalShareholderEquity (from Balance Sheet latest annual report)
     def get_equity_multiplier(self):
         try:
-            latest = self.balance_sheet["annualReports"][0]
+            latest = self.balance_sheet["quarterlyReports"][0]
             total_assets = float(latest.get("totalAssets", 0))
             total_equity = float(latest.get("totalShareholderEquity", 0))
             if total_equity:
@@ -235,14 +291,14 @@ class CompanyFinancials:
         except (IndexError, KeyError, ValueError):
             return None
 
-    # 16. Operating income 1yr growing rate = ((latest operating income - previous operating income) / previous operating income) * 100
+    # 16. Operating income 1yr growing rate in %
     def get_operating_income_growth_rate_1yr(self):
         try:
-            annual_reports = self.income_statement["annualReports"]
-            if len(annual_reports) < 2:
-                return None
-            latest = float(annual_reports[0].get("operatingIncome", 0))
-            previous = float(annual_reports[1].get("operatingIncome", 0))
+            quarterly_reports = self.income_statement["quarterlyReports"][:8]
+            if len(quarterly_reports) < 8:
+                raise Exception("Not enough quarterly data to compute operating income growth rate for last 1 years")
+            latest = sum(float(q.get("operatingIncome", 0)) for q in quarterly_reports[:4])
+            previous = sum(float(q.get("operatingIncome", 0)) for q in quarterly_reports[4:8])
             if previous:
                 return ((latest - previous) / previous) * 100
             else:
