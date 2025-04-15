@@ -206,12 +206,12 @@ class CompanyFinancials:
             if len(quarterly_reports) < 16:
                 raise Exception("Not enough quarterly data to compute book value per share for last 3 years")
 
-            annual_bs = [sum(float(quarterly_reports[i * 4 + j].get("totalShareholderEquity", 0)) for j in range(4)) for i in range(4)]
+            annual_bs = [float(quarterly_reports[i * 4].get("totalShareholderEquity", 0)) for i in range(4)]
             shares_outstanding = [float(quarterly_reports[i * 4].get("commonStockSharesOutstanding", 0)) for i in range(4)]
             growth_count = 0
             # Compute book value per share for each year and compare to previous year
             bvps = []
-            for i in range(3):
+            for i in range(4):
                 bvps.append(annual_bs[i] / shares_outstanding[i] if shares_outstanding[i] else 0)
             # Compare each consecutive pair (from older to newer)
             for i in range(len(bvps) - 1):
@@ -229,7 +229,7 @@ class CompanyFinancials:
             if len(quarterly_reports) < 16:
                 raise Exception("Not enough quarterly data to compute revenue for last 3 years")
 
-            revenues = [sum(float(quarterly_reports[i * 4 + j].get("totalRevenue", 0)) for j in range(4)) for i in range(4)]
+            revenues = [float(quarterly_reports[i * 4].get("totalRevenue", 0)) for i in range(4)]
             growth_count = 0
             # Compare consecutive annual revenues (list is most recent first)
             for i in range(len(revenues) - 1):
@@ -242,14 +242,14 @@ class CompanyFinancials:
     # 12. How many quarters does revenue grow in last 4 quarters?
     def get_quarters_revenue_growth_last_4(self):
         try:
-            quarterly_reports = self.income_statement["quarterlyReports"][:5]
-            if len(quarterly_reports) < 5:
+            quarterly_reports = self.income_statement["quarterlyReports"][:8]
+            if len(quarterly_reports) < 8:
                 raise Exception("Not enough quarterly data to compute revenue for last 4 quarters")
 
             growth_count = 0
             revenues = [float(report.get("totalRevenue", 0)) for report in quarterly_reports]
-            for i in range(len(revenues) - 1):
-                if revenues[i] > revenues[i + 1]:
+            for i in range(4):
+                if revenues[i] > revenues[i + 4]:
                     growth_count += 1
             return growth_count
         except (IndexError, KeyError, ValueError):
@@ -319,35 +319,34 @@ class CompanyFinancials:
         except (KeyError, ValueError):
             return None
 
-    # 18. If the current ROE is the highest in the trailing years.
+    # 18. If the current ROE is the highest in the last 3 years.
     #    Here we compute ROE for each of the available annual periods using: ROE = netIncome / totalShareholderEquity.
     #    We then compare the current (latest) ROE with the previous periods.
     def is_current_roe_highest(self):
         try:
-            quarter_is = self.income_statement["quarterlyReports"]
-            quarter_bs = self.balance_sheet["quarterlyReports"]
-            n_periods = min(len(quarter_is), len(quarter_bs), 4)
-            if n_periods == 0:
-                return False
+            annual_is = self.income_statement["annualEarnings"][:3]
+            annual_bs = self.balance_sheet["annualEarnings"][:3]
+            if len(annual_is) < 3 or len(annual_bs) < 3:
+                raise Exception("Not enough quarterly data to compute roe for last 3 years")
+
             roe_list = []
-            for i in range(n_periods):
-                net_income = float(quarter_is[i].get("netIncome", 0))
-                total_equity = float(quarter_bs[i].get("totalShareholderEquity", 0))
+            for i in range(3):
+                net_income = float(annual_is[i].get("netIncome", 0))
+                total_equity = float(annual_bs[i].get("totalShareholderEquity", 0))
                 if total_equity:
                     roe = net_income / total_equity
                     roe_list.append(roe)
             if not roe_list:
                 return False
-            current_roe = roe_list[0]
-            # Check if the current ROE is strictly higher than all trailing periods
-            return current_roe == max(roe_list)
+            # Check if the current ROE is strictly higher than all other periods
+            return roe_list[0] == max(roe_list)
         except (IndexError, KeyError, ValueError):
             return False
 
 
 if __name__ == '__main__':
     # Example usage:
-    ticker = 'AAPL'
+    ticker = 'GOOG'
 
     try:
         company = CompanyFinancials(ticker)
