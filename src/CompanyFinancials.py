@@ -384,7 +384,7 @@ class CompanyFinancials:
             equity_multiplier +
             roa_trailing * 10 +
             roe_trailing * 10 +
-            operating_income_growth_rate +
+            operating_income_growth_rate / 10 +
             eps_positive_years
         )
         return round(score, 2)
