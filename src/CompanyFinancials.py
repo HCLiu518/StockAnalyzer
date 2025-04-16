@@ -101,11 +101,17 @@ class CompanyFinancials:
 
     # 2. Market Cap (from Overview)
     def get_market_cap(self):
-        return float(self.overview.get("MarketCapitalization", 0))
+        try:
+            return float(self.overview.get("MarketCapitalization", 0))
+        except ValueError:
+            return None
 
     # 3. P/E Ratio (from Overview)
     def get_pe_ratio(self):
-        return float(self.overview.get("PERatio", 0))
+        try:
+            return float(self.overview.get("PERatio", 0))
+        except ValueError:
+            return None
 
     # 4. Operating Income (trailing annual, from Income Statement)
     def get_operating_income_trailing(self):
@@ -309,10 +315,13 @@ class CompanyFinancials:
     # 17. How many years does EPS > 0 in last 3 years? (from Earnings annual data)
     def get_eps_positive_years_last_3(self):
         try:
-            annual_earnings = self.earnings.get("annualEarnings", [])[:3]
+            quarterly_reports = self.earnings.get("quarterlyEarnings", [])[:12]
+            if len(quarterly_reports) < 8:
+                raise Exception("Not enough quarterly data to compute eps for last 3 years")
+
+            eps_list = [sum(float(quarterly_reports[i * 4 + j].get("reportedEPS", 0)) for j in range(4)) for i in range(3)]
             count = 0
-            for entry in annual_earnings:
-                eps = float(entry.get("reportedEPS", 0))
+            for eps in eps_list:
                 if eps > 0:
                     count += 1
             return count
@@ -343,10 +352,48 @@ class CompanyFinancials:
         except (IndexError, KeyError, ValueError):
             return False
 
+    def calculate_score(self):
+        book_value_growth_years = self.get_book_value_growth_years_last_3() or 0
+        revenue_growth_years = self.get_revenue_growth_years_last_3() or 0
+        quarterly_revenue_growth_count = self.get_quarters_revenue_growth_last_4() or 0
+        revenue_growth_percent = self.get_revenue_growth_percent_last_3() or 0
+        market_cap = self.get_market_cap() or 0
+        gross_margin = self.get_gross_margin_trailing() or 0
+        operating_income_trailing = self.get_operating_income_trailing() or 0
+        net_income_trailing = self.get_net_income_trailing() or 0
+        revenue_trailing = self.get_revenue_trailing() or 0
+        is_small_shares = self.is_shares_outstanding_less_than_500MM()
+        is_highest_roe = self.is_current_roe_highest()
+        equity_multiplier = self.get_equity_multiplier() or 0
+        roa_trailing = self.get_roa_trailing() or 0
+        operating_income_growth_rate = self.get_operating_income_growth_rate_1yr() or 0
+        eps_positive_years = self.get_eps_positive_years_last_3() or 0
+        roe_trailing = self.get_roe_trailing() or 0
+
+        score = (
+            book_value_growth_years +
+            revenue_growth_years +
+            quarterly_revenue_growth_count +
+            revenue_growth_percent +
+            (1 if market_cap > 100_000_000_000 else 0) +
+            gross_margin / 10 +
+            (operating_income_trailing / revenue_trailing) * 10 +
+            (net_income_trailing / revenue_trailing) * 10 +
+            (1 if is_small_shares else 0) +
+            (1 if is_highest_roe else 0) -
+            equity_multiplier +
+            roa_trailing * 10 +
+            roe_trailing * 10 +
+            operating_income_growth_rate +
+            eps_positive_years
+        )
+        return round(score, 2)
+
+
 
 if __name__ == '__main__':
     # Example usage:
-    ticker = 'GOOG'
+    ticker = 'AAPL'
 
     try:
         company = CompanyFinancials(ticker)
@@ -369,6 +416,7 @@ if __name__ == '__main__':
         print(f"Operating Income 1yr Growth Rate: {company.get_operating_income_growth_rate_1yr()}")
         print(f"EPS positive years (last 3 yrs): {company.get_eps_positive_years_last_3()}")
         print(f"Is Current ROE the highest? {company.is_current_roe_highest()}")
+        print(f"The final score {company.calculate_score()}")
 
     except Exception as ex:
         print("An error occurred while fetching financial data:", ex)
