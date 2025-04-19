@@ -374,7 +374,7 @@ class CompanyFinancials:
             book_value_growth_years +
             revenue_growth_years +
             quarterly_revenue_growth_count +
-            revenue_growth_percent +
+            revenue_growth_percent / 10 +
             (1 if market_cap > 100_000_000_000 else 0) +
             gross_margin / 10 +
             (operating_income_trailing / revenue_trailing) * 10 +
