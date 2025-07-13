@@ -354,7 +354,7 @@ class CompanyFinancials:
 
     def calculate_score(self):
         book_value_growth_years = self.get_book_value_growth_years_last_3() or 0
-        revenue_growth_years = self.get_revenue_growth_years_last_3() or 0
+        revenue_growth_years = self.get_revenue_growth_years_last_3() / 10 or 0
         quarterly_revenue_growth_count = self.get_quarters_revenue_growth_last_4() or 0
         revenue_growth_percent = self.get_revenue_growth_percent_last_3() or 0
         market_cap = self.get_market_cap() or 0
@@ -366,7 +366,7 @@ class CompanyFinancials:
         is_highest_roe = self.is_current_roe_highest()
         equity_multiplier = self.get_equity_multiplier() or 0
         roa_trailing = self.get_roa_trailing() or 0
-        operating_income_growth_rate = self.get_operating_income_growth_rate_1yr() or 0
+        operating_income_growth_rate = self.get_operating_income_growth_rate_1yr() / 10 or 0
         eps_positive_years = self.get_eps_positive_years_last_3() or 0
         roe_trailing = self.get_roe_trailing() or 0
 

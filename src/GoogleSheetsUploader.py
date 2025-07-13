@@ -61,6 +61,17 @@ class GoogleSheetsUploader:
         except Exception as e:
             print("Error uploading row:", e)
 
+    def destroy_token_file(self):
+        token_file = "token.json"
+        if os.path.exists(token_file):
+            try:
+                os.remove(token_file)
+                print("Token file deleted successfully.")
+            except Exception as e:
+                print("Failed to delete token file:", e)
+        else:
+            print("No token file found to delete.")
+
 
 # Example usage:
 if __name__ == '__main__':

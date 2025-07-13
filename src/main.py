@@ -49,3 +49,5 @@ for ticker in tickers.data.keys():
         print(f"Error processing ticker {ticker}: {err}")
 
     time.sleep(5)
+
+sheets_uploader.destroy_token_file()
